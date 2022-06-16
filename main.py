@@ -56,7 +56,6 @@ if __name__ == "__main__":
                 'model': m
             }
 
-            model.train()
             for i in trange(num_epochs):
                 while (True):
                     try:
@@ -72,17 +71,17 @@ if __name__ == "__main__":
                     l.backward()
                     optimizer.step()
 
-                # model.eval()
-                #
-                # train_acc = 0
-                # train_loss = 0
-                # for x, y in trainloader:
-                #     X, Y = x.to(device), y.to(device)
-                #     output = model(X)
-                #     train_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
-                #     train_loss += loss(output, Y)
-                # run.track(train_acc / num_train, 'Training Accuracy(%)', epoch=i)
-                # run.track(train_loss / num_train, 'Training Loss', epoch=i)
+                model.eval()
+
+                train_acc = 0
+                train_loss = 0
+                for x, y in trainloader:
+                    X, Y = x.to(device), y.to(device)
+                    output = model(X)
+                    train_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
+                    train_loss += loss(output, Y)
+                run.track(train_acc / num_train, 'Training Accuracy(%)', epoch=i)
+                run.track(train_loss / num_train, 'Training Loss', epoch=i)
 
                 test_acc = 0
                 test_loss = 0
