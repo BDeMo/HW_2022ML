@@ -1,94 +1,132 @@
+import random
+
 import numpy as np
 import torch
 from torch import Tensor
-from torch.nn import NLLLoss
+from torch.nn import NLLLoss, CrossEntropyLoss, MSELoss
 from torch.utils.data import DataLoader
 import aim
 from tqdm import trange
 
 import config
-from config import *
 
-from model.Net import Mclr_Logistic, DNN
+from model.Net import Mclr_Logistic, DNN, lnr
 
-ModelList = {
-    'mclr': Mclr_Logistic
-    , 'dnn': DNN
-}
+SEED = 2022
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+np.random.seed(SEED)
+random.seed(SEED)
+torch.backends.cudnn.deterministic = True
+
+NUM_CLASSES = 2
 
 exp_name = 'hw_2022ml'
 data_path = './data/data.npy'
 label_path = './data/label.npy'
 
+ModelList = {
+    'mclr': Mclr_Logistic
+    , 'dnn': DNN
+    , 'linear': lnr
+}
+LossList = {
+    'NLLLoss': NLLLoss
+    , 'CrossEntropyLoss': CrossEntropyLoss
+    , 'MSELoss': MSELoss
+}
+
 if __name__ == "__main__":
+    print('Loading data')
+    print(data_path)
+    print(label_path)
     datas = np.load(data_path)
     labels = np.load(label_path)
     datas = [(Tensor(x).type(torch.float32), y) for x, y in zip(datas[:], labels[:])]
-    iterdata = iter(DataLoader(datas, batch_size=num_train, shuffle=True))
+    iterdata = iter(DataLoader(datas, batch_size=config.num_train, shuffle=True))
     d_train, l_trian = next(iterdata)
     d_test, l_test = next(iterdata)
 
+    print('Data Loaded')
     train_data = [(x, y) for x, y in zip(d_train, l_trian)]
     test_data = [(x, y) for x, y in zip(d_test, l_test)]
-    trainloader = DataLoader(train_data, batchsize, shuffle=True)
-    testloader = DataLoader(test_data, batchsize, shuffle=True)
+    trainloader = DataLoader(train_data, config.batchsize, shuffle=True)
+    testloader = DataLoader(test_data, config.batchsize, shuffle=True)
     itertrain = iter(trainloader)
     # itertest = iter(testloader)
 
     # trainloader_full = DataLoader(train_data, len(train_data), shuffle=True)
     testloader_full = DataLoader(test_data, len(test_data), shuffle=True)
 
-    device = torch.device("cuda:{}".format(gpu) if torch.cuda.is_available() and gpu != -1 else "cpu")
+    device = torch.device("cuda:{}".format(config.gpu) if torch.cuda.is_available() and config.gpu != -1 else "cpu")
 
-    for m in config.model:
-        for t in range(times):
+    print('Training')
+    for ml in config.mandl:
+        m, l = ml
+        for t in range(config.times):
             model = ModelList[m]().to(device)
-            loss = NLLLoss()
-            optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+            loss = LossList[l]()
+            optimizer = torch.optim.SGD(model.parameters(), lr=config.learning_rate)
 
-            run = aim.Run(experiment=exp_name + '_' + m)
+            run = aim.Run(experiment=exp_name + '_' + m + '_' + l)
             run['hparam'] = {
                 'num_train': config.num_train,
                 'num_test': config.num_test,
                 'learning_rate': config.learning_rate,
                 'batchsize': config.batchsize,
                 'num_epochs': config.num_epochs,
-                'model': m
+                'model': m,
+                'loss': l
             }
-
-            for i in trange(num_epochs):
+            print(m, l, 'times', t)
+            for i in trange(config.num_epochs):
                 while (True):
                     try:
                         (x, y) = next(itertrain)
                     except StopIteration:
                         itertrain = iter(trainloader)
                         break
-                    X, Y = x.to(device), y.to(device)
+                    if l == "MSELoss":
+                        X, Y = x.to(device), torch.eye(NUM_CLASSES)[y, :].to(device)
+                    else:
+                        X, Y = x.to(device), y.to(device)
                     model.train()
                     optimizer.zero_grad()
                     output = model(X)
-                    l = loss(output, Y)
-                    l.backward()
+                    _loss = loss(output, Y)
+                    _loss.backward()
                     optimizer.step()
 
                 model.eval()
 
-                train_acc = 0
-                train_loss = 0
+                train_acc = 0.
+                train_loss = 0.
                 for x, y in trainloader:
-                    X, Y = x.to(device), y.to(device)
+                    if l == "MSELoss":
+                        X, Y = x.to(device), torch.eye(NUM_CLASSES)[y, :].to(device)
+                    else:
+                        X, Y = x.to(device), y.to(device)
                     output = model(X)
-                    train_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
-                    train_loss += loss(output, Y)
-                run.track(train_acc / num_train, 'Training Accuracy(%)', epoch=i)
-                run.track(train_loss / num_train, 'Training Loss', epoch=i)
+                    if l == "MSELoss":
+                        train_acc += (torch.sum(torch.argmax(output, dim=1) == torch.argmax(Y, dim=1))).item()
+                    else:
+                        train_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
+                    train_loss += loss(output, Y).item()
+                run.track(train_acc / config.num_train, 'Training Accuracy(%)', epoch=i)
+                run.track(train_loss / config.num_train, 'Training Loss', epoch=i)
 
-                test_acc = 0
-                test_loss = 0
+                test_acc = 0.
+                test_loss = 0.
                 for x, y in testloader_full:
-                    X, Y = x.to(device), y.to(device)
+                    if l == "MSELoss":
+                        X, Y = x.to(device), torch.eye(NUM_CLASSES)[y, :].to(device)
+                    else:
+                        X, Y = x.to(device), y.to(device)
                     output = model(X)
-                    test_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
-                    test_loss += loss(output, Y)
-                run.track(test_acc / num_test, 'Testing Accuracy(%)', epoch=i)
-                run.track(test_loss / num_test, 'Testing Loss', epoch=i)
+                    if l == "MSELoss":
+                        test_acc += (torch.sum(torch.argmax(output, dim=1) == torch.argmax(Y, dim=1))).item()
+                    else:
+                        test_acc += (torch.sum(torch.argmax(output, dim=1) == Y)).item()
+                    test_loss += loss(output, Y).item()
+                run.track(test_acc / config.num_test, 'Testing Accuracy(%)', epoch=i)
+                run.track(test_loss / config.num_test, 'Testing Loss', epoch=i)

@@ -2,6 +2,19 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
+class lnr(nn.Module):
+    def __init__(self, input_dim=607500, output_dim=2):
+        super(lnr, self).__init__()
+        self.fc1 = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        output = F.softmax(x, dim=1)
+        return output
+
+
 class Mclr_Logistic(nn.Module):
     def __init__(self, input_dim=607500, output_dim=2):
         super(Mclr_Logistic, self).__init__()
@@ -12,6 +25,7 @@ class Mclr_Logistic(nn.Module):
         x = self.fc1(x)
         output = F.log_softmax(x, dim=1)
         return output
+
 
 class DNN(nn.Module):
     def __init__(self, input_dim=607500, mid_dim=100, output_dim=2):
