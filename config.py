@@ -17,7 +17,7 @@ dec_dim = 1000
 LLSM = True
 
 mandl = [
-    # ('lnr', 'MSELoss'),
-    # ('mclr', 'NLLLoss')
+    ('lnr', 'MSELoss'),
+    ('mclr', 'NLLLoss'),
     ('dnn', 'NLLLoss')
 ]
