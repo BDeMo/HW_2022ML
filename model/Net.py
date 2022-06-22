@@ -2,6 +2,15 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+class lls(nn.Module):
+    def __init__(self, input_dim=607500, output_dim=2):
+        super(lls, self).__init__()
+        self.fc1 = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        return x
 
 class lnr(nn.Module):
     def __init__(self, input_dim=607500, output_dim=2):
